@@ -3,13 +3,11 @@ import os
 import numpy as np
 import cv2
 import torch
-import time
 import argparse
 from tqdm import tqdm
 from model.utils.config import cfg, cfg_from_file
 from model.faster_rcnn.resnet import resnet
-from utils import get_image_blob, save_features
-from numpy_nms.cpu_nms import cpu_nms
+from utils import get_image_blob, save_features, threshold_results
 
 
 def parse_args():
@@ -86,25 +84,9 @@ if __name__ == '__main__':
         cls_prob = cls_prob.data.cpu().numpy().squeeze()
         pooled_feat = pooled_feat.data.cpu().numpy()
 
-        # Keep only the best detections.
-        max_conf = np.zeros((boxes.shape[0]))
-        for cls_ind in range(1, cls_prob.shape[1]):
-            cls_scores = cls_prob[:, cls_ind]
-            dets = np.hstack((boxes, cls_scores[:, np.newaxis])).astype(np.float32)
-            keep = np.array(cpu_nms(dets, cfg.TEST.NMS))
-            max_conf[keep] = np.where(cls_scores[keep] > max_conf[keep], cls_scores[keep], max_conf[keep])
-
-        keep_boxes = np.where(max_conf >= CONF_THRESH)[0]
-        if len(keep_boxes) < MIN_BOXES:
-            keep_boxes = np.argsort(max_conf)[::-1][:MIN_BOXES]
-        elif len(keep_boxes) > MAX_BOXES:
-            keep_boxes = np.argsort(max_conf)[::-1][:MAX_BOXES]
-       
-        image_feat = pooled_feat[keep_boxes]
-        if args.save_boxes:
-            image_bboxes = boxes[keep_boxes]
-        else:
-            image_bboxes = None    
+        image_feat, image_bboxes = threshold_results(cls_prob, pooled_feat, boxes, CONF_THRESH, MIN_BOXES, MAX_BOXES)
+        if not args.save_boxes:
+            image_bboxes = None
 
         output_file = os.path.join(args.output_dir, im_file.split('.')[0]+'.npy')
         save_features(output_file, image_feat, image_bboxes)
