@@ -79,12 +79,13 @@ if __name__ == '__main__':
             rois, cls_prob, _, _, _, _, _, _, \
             pooled_feat = fasterRCNN(im_data, im_info, gt_boxes, num_boxes)
 
-        boxes = rois.data.cpu().numpy()[:, :, 1:5].squeeze()
+        boxes = rois[:, :, 1:5].squeeze()
         boxes /= im_scales[0]
-        cls_prob = cls_prob.data.cpu().numpy().squeeze()
-        pooled_feat = pooled_feat.data.cpu().numpy()
+        cls_prob = cls_prob.squeeze()
 
         image_feat, image_bboxes = threshold_results(cls_prob, pooled_feat, boxes, CONF_THRESH, MIN_BOXES, MAX_BOXES)
+        image_feat = image_feat.cpu().numpy()
+        image_bboxes = image_bboxes.cpu().numpy()
         if not args.save_boxes:
             image_bboxes = None
 

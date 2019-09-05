@@ -1,7 +1,8 @@
 import cv2
 import numpy as np
-from numpy_nms.cpu_nms import cpu_nms
+import torch
 
+from model.roi_layers import nms
 from model.utils.blob import im_list_to_blob
 from model.utils.config import cfg
 
@@ -52,18 +53,20 @@ def save_features(output_file, features, boxes):
 
 def threshold_results(prob, feat, boxes, thr, min_boxes=10, max_boxes=100):
     # Keep only the best detections.
-    max_conf = np.zeros((boxes.shape[0]))
+    max_conf = torch.zeros((boxes.shape[0])).to(boxes.device)
     for cls_ind in range(1, prob.shape[1]):
         cls_scores = prob[:, cls_ind]
-        dets = np.hstack((boxes, cls_scores[:, np.newaxis])).astype(np.float32)
-        keep = np.array(cpu_nms(dets, cfg.TEST.NMS))
-        max_conf[keep] = np.where(cls_scores[keep] > max_conf[keep], cls_scores[keep], max_conf[keep])
+        dets = torch.cat((boxes, cls_scores.unsqueeze(1)), 1)
+        # dets = np.hstack((boxes, cls_scores[:, np.newaxis])).astype(np.float32)
+        keep = nms(boxes, cls_scores, cfg.TEST.NMS)
+        # keep = np.array(cpu_nms(dets, cfg.TEST.NMS))
+        max_conf[keep] = torch.where(cls_scores[keep] > max_conf[keep], cls_scores[keep], max_conf[keep])
 
-    keep_boxes = np.where(max_conf >= thr)[0]
+    keep_boxes = torch.nonzero(max_conf >= thr)[:,0]
     if len(keep_boxes) < min_boxes:
-        keep_boxes = np.argsort(max_conf)[::-1][:min_boxes]
+        keep_boxes = torch.argsort(max_conf, descending=True)[:min_boxes]
     elif len(keep_boxes) > max_boxes:
-        keep_boxes = np.argsort(max_conf)[::-1][:max_boxes]
+        keep_boxes = torch.argsort(max_conf, descending=True)[:max_boxes]
 
     image_feat = feat[keep_boxes]
     image_bboxes = boxes[keep_boxes]
