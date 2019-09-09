@@ -1,6 +1,9 @@
 import _init_paths
 import os
+import sys
 import numpy as np
+import csv
+import base64
 import cv2
 import torch
 import argparse
@@ -27,9 +30,25 @@ def parse_args():
     parser.add_argument('--boxes', dest='save_boxes',
                         help='save bounding boxes',
                         action='store_true')
+    parser.add_argument('--format', dest='format',
+                        help='output file format (ex. npy|tsv)',
+                        default='npy')
 
     args = parser.parse_args()
     return args
+
+
+def write_tsv(tsv_writer, image_id, im, boxes, features):
+
+    row = {'image_id': image_id,
+           'image_h': np.size(im, 0),
+           'image_w': np.size(im, 1),
+           'num_boxes' : len(boxes),
+           'boxes': base64.b64encode(boxes).decode('utf-8'),
+           'features': base64.b64encode(features).decode('utf-8')}
+
+    tsv_writer.writerow(row)
+
 
 
 if __name__ == '__main__':
@@ -64,6 +83,17 @@ if __name__ == '__main__':
     num_images = len(imglist)
     print('Number of images: {}.'.format(num_images))
 
+    name = os.path.basename(os.path.abspath(args.image_dir))
+
+    if args.format == 'tsv':
+        csv.field_size_limit(sys.maxsize)
+        FIELDNAMES = ['image_id', 'image_w', 'image_h', 'num_boxes', 'boxes', 'features']
+
+        cfg_name = os.path.splitext(os.path.basename(args.cfg_file))[0]
+        output_path = os.path.join(args.output_dir, '{}_{}_features.tsv'.format(name, cfg_name))
+        output_file = open(output_path, 'w+')
+        writer = csv.DictWriter(output_file, delimiter = '\t', fieldnames = FIELDNAMES)
+
     # Extract features.
     for im_file in tqdm(imglist):
         im = cv2.imread(os.path.join(args.image_dir, im_file))
@@ -89,6 +119,12 @@ if __name__ == '__main__':
         if not args.save_boxes:
             image_bboxes = None
 
-        output_file = os.path.join(args.output_dir, im_file.split('.')[0]+'.npy')
-        save_features(output_file, image_feat, image_bboxes)
-        #torch.cuda.empty_cache()
+        if args.format == 'npy':
+            output_file = os.path.join(args.output_dir, im_file.split('.')[0]+'.npy')
+            save_features(output_file, image_feat, image_bboxes)
+        elif args.format == 'tsv':
+            im_id = int(os.path.splitext(im_file)[0].split('_')[-1])
+            write_tsv(writer, im_id, im, image_bboxes, image_feat)
+
+    if args.format == 'tsv':
+        output_file.close()
