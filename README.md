@@ -32,7 +32,7 @@ This code implements an extraction of Bottom-up image features ([paper](https://
 4. Compile the code:
     ```
     cd lib
-    sh make.sh
+    python setup.py build develop
     ```
 
 5. Download the [pretrained model](https://www.dropbox.com/s/qo4xf1dx3oxi1h6/bottomup_pretrained_10_100.pth?dl=0) and put it in models/ folder.
